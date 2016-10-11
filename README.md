@@ -28,6 +28,7 @@
 1. Get Docker
 2. Get jq
 3. Get minikube (?)
+4. Clone this repository
 
 ### Create GCP Account
 
@@ -176,12 +177,12 @@ Open Dashboard, use basic Auth credentials
 gcloud container clusters describe $cluster_name --format="value(masterAuth.password)"
 ```
 
-## Getting Familiar with Deployments and exposing them
+## Getting Familiar with creating & exposing Deployments
 
-Deployments are a powerfull concept in Kubernetes. We will look at writing deployment manually later,
-but to get familiar with the power of `kubectl`, lets do a few impartive operations without going to deep into the desired state definitions behind the scenes (where the power of reproducability really lies).
+Deployments are a powerfull concept in Kubernetes. We will look at writing deployments manually later,
+but to get familiar with the power of `kubectl`, lets do a few imperative operations without going to deep into the desired state definitions behind the scenes (Desired State is where the power for reproducability really lies).
 
-A useful scenario for these commands would be to troubleshooting, such as quickly run a pod with bash for some in-cluster testing.
+A useful scenario for these commands would be to troubleshooting: for example: quickly run a shell in a pod for some in-cluster testing, or taking a faulty pod out of rotation and using a shell to investigate the cause of the failure without having production trafic routed to the containers.
 
 ### Deploying nginx proxy
 
@@ -197,35 +198,109 @@ Monitor the status of the deployment:
 kubectl get po -w
 ```
 
+To allow ingress traffic, we need to expose the nginx deployment as a NodePort on the cluster nodes:
 ```
-kubectl expose nginx
+kubectl expose deploy nginx --target-port=80 --type=NodePort
+```
+Note: Ingress works only if a [L7 Load Balancer controller](https://github.com/kubernetes/contrib/tree/master/ingress/controllers/gce) exists (`kubectl get -n kube-system rc -l k8s-app=glbc -o yaml`)
+
+Get the nodePort assigned
+```
+kubectl get svc nginx -o=json | jq -r .spec.ports[].nodePort?
 ```
 
+Expose nginx through a Basic Ingress
 ```
-kubectl describe svc nginx -o=json | jq .
+kubectl create -f part1/basic-ingress.yaml
 ```
+
+[Reference](https://cloud.google.com/container-engine/docs/tutorials/http-balancer)
+Note: This will take several minutes to provision following Gcloud resources:
+
+[Global Forwarding Rule](https://cloud.google.com/compute/docs/load-balancing/http/global-forwarding-rules) -> [TargetHttpProxy](https://cloud.google.com/compute/docs/load-balancing/http/target-proxies) -> [Url Map](https://cloud.google.com/compute/docs/load-balancing/http/url-map) -> [Backend Service](https://cloud.google.com/compute/docs/load-balancing/http/backend-service) -> [Instance Group](https://cloud.google.com/compute/docs/instance-groups/) (our
+cluster nodes)
+![Overview Diagram](pictures/basic-http-load-balancer.svg)
+
+
+First resources come up quickly, Bakend Service however can take up to 15 minutes before being healthy:
+```
+kubectl describe ing basic-ingress
+gcloud compute forwarding-rules list
+gcloud compute target-http-proxies list
+gcloud compute url-maps list
+gcloud compute backend-services list
+
+ # wait for service to become Healthy
+
+watch -n 1 gcloud compute backend-services get-health <k8s-be-...>
+```
+
+Note: [Link to Console](https://console.cloud.google.com/networking/loadbalancing/list)
+
+```
+export basic_ingress_ip=`kubectl get ing basic-ingress -o json | jq -r .status.loadBalancer.ingress[].ip`
+open  http://$basic_ingress_ip/
+```
+
 ### ConfigMaps
 
 ConfigMaps allow us to store configuration within the Enviroment.
 For demonstration purposes, let's put the index.html in the environment and mount it into the pods.
 
-Note: Ideally we'd use 
+```
+kubectl create configmap nginx-index --from-file part1/index.html
+```
 
-### Load balancing nginx
+Mount index.html into running pod
+```
+kubectl apply -f part1/nginx-index-mounted.yaml
+```
 
-[Reference](https://cloud.google.com/container-engine/docs/tutorials/http-balancer)
+```
+while true; do curl -sL $basic_ingress_ip | grep -i title; sleep 1; done
+```
 
+### Scaling nginx
+
+Watch the pod events:
+
+```
+kubectl get po -w
+```
+
+Scale the number of nginx instances
+```
+kubectl scale deploy nginx --replicas=3
+```
+
+### Changing Configurations propagate through cluster
+
+Edit the configmap:
+
+```
+kubectl edit configmap nginx-index
+```
+
+Takes about 40 seconds for the new configuration values to propagate to all the pods
+
+Note: You would not deploy new application versions this way, just configuration changes
 
 ### Rolling Update
 
+Monitor the version deployed:
 ```
-while true; do curl -i $cluster_ip | grep -i "powered by"; sleep 2; done
-```
-
-```
-kubectl set image nginx=nginx:1.11-alpine
+while true; do curl -sI $basic_ingress_ip | grep -i server; sleep 1; done
 ```
 
+Monitor the Pod events
+```
+kubectl get po -w
+```
+
+Set the new image to the deployment
+```
+kubectl set image deployment/nginx nginx=nginx:1.11-alpine
+```
 
 ## Overview of the sample application
 
