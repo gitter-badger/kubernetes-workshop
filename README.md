@@ -202,7 +202,7 @@ To allow ingress traffic, we need to expose the nginx deployment as a NodePort o
 ```
 kubectl expose deploy nginx --target-port=80 --type=NodePort
 ```
-Note: Ingress works only if a [L7 Load Balancer controller](https://github.com/kubernetes/contrib/tree/master/ingress/controllers/gce) exists (`kubectl get -n kube-system rc -l k8s-app=glbc -o yaml`)
+Note: Ingress works only if a [L7 Load Balancer controller](https://github.com/kubernetes/contrib/tree/master/ingress/controllers/gce) exists, this is the case on GKE (`kubectl get -n kube-system rc -l k8s-app=glbc -o yaml`)
 
 Get the nodePort assigned
 ```
@@ -242,18 +242,16 @@ export basic_ingress_ip=`kubectl get ing basic-ingress -o json | jq -r .status.l
 open  http://$basic_ingress_ip/
 ```
 
-### ConfigMaps
+### Scope App Configuration to environment
 
-ConfigMaps allow us to store configuration within the Enviroment.
+ConfigMaps allow us to store configuration within the deployment Enviroment.
 For demonstration purposes, let's put the index.html in the environment and mount it into the pods.
 
 ```
 kubectl create configmap nginx-index --from-file part1/index.html
 ```
 
-
-
-Mount index.html into running pod
+Mount index.html into running pods
 
 Edit the deployment Manifest:
 ```diff
@@ -293,7 +291,7 @@ Scale the number of nginx instances
 kubectl scale deploy nginx --replicas=3
 ```
 
-### Changing Configurations propagate through cluster
+### Propagate configuration changes
 
 Edit the configmap:
 
@@ -301,9 +299,9 @@ Edit the configmap:
 kubectl edit configmap nginx-index
 ```
 
-Takes about 40 seconds for the new configuration values to propagate to all the pods
+Takes about 40 seconds for the new configuration values to propagate to all the pods (probably there's some caching for the index.html as well..)
 
-Note: You would not deploy new application versions this way, just configuration changes
+Note: You would not deploy new application versions this way, this just demonstrate configuration changes are propagated without restarting / recreating pods.
 
 ### Rolling Update
 
