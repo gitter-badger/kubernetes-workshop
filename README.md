@@ -1,5 +1,7 @@
 # Kubernetes Workshop - GCPUG
 
+[![Join the chat at https://gitter.im/cloud-native-singapore/kubernetes-workshop](https://badges.gitter.im/cloud-native-singapore/kubernetes-workshop.svg)](https://gitter.im/cloud-native-singapore/kubernetes-workshop?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 ## Agenda
 
 * Intro to Linux Containers & Container Orchestration
