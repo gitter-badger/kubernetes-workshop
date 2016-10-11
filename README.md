@@ -251,7 +251,27 @@ For demonstration purposes, let's put the index.html in the environment and moun
 kubectl create configmap nginx-index --from-file part1/index.html
 ```
 
+
+
 Mount index.html into running pod
+
+Edit the deployment Manifest:
+```diff
+30a31,33
+>         volumeMounts:
+>          - name: nginx-index
+>            mountPath: /usr/share/nginx/html/
+36a40,46
+>       volumes:
+>        - name: nginx-index
+>          configMap:
+>            name: nginx-index
+>            items:
+>            - key: index.html
+>              path: index.html
+```
+
+Use the provided example:
 ```
 kubectl apply -f part1/nginx-index-mounted.yaml
 ```
